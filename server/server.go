@@ -1,7 +1,9 @@
 package server
 
 import (
-	"io/fs"
+	"errors"
+	"net"
+	"sync"
 
 	"github.com/toastsandwich/fileSharingSystem/connection"
 )
@@ -27,22 +29,62 @@ example:
 
 */
 
+const maxconnections = 10
+
 type FileServer struct {
-	addr string
-	fs   *fs.FS
+	addr    string
+	counter int // counter to have server limited connections
+	mu      sync.Mutex
 
 	ConnPool map[*connection.FileConn]struct{} // ConnPool for active users
+	ErrorCh  chan error                        // For better error handelling
 }
 
 func NewFileServer(addr string) *FileServer {
-	// logic for file system
-	var fs *fs.FS
-	// pending logic
-
-	
 	return &FileServer{
-		addr:     addr,
-		fs:       fs,
+		addr:    addr,
+		counter: 0,
+
 		ConnPool: make(map[*connection.FileConn]struct{}),
+		ErrorCh:  make(chan error),
 	}
+}
+
+func (f *FileServer) Start() {
+	// listener for accepting incoming connections
+	ln, err := net.Listen("tcp", f.addr)
+	if err != nil {
+		f.ErrorCh <- errors.New("error creating listener for the server")
+		return
+	}
+	defer ln.Close() // close the listner
+
+	// wait for connections
+	for {
+		// check if connection limit is reached.
+		if f.counter >= maxconnections {
+			f.mu.Unlock()
+			continue // skip connection
+		}
+
+		// accept the connection
+		conn, err := ln.Accept()
+		if err != nil {
+			f.ErrorCh <- err
+			continue
+		}
+
+		// get the file connection.
+		fc, err := connection.NewFileConn(conn)
+		if err != nil {
+			f.ErrorCh <- err
+			continue
+		}
+
+		// start a seperate go rountine for each connetion
+		go f.handleConnection(fc)
+	}
+}
+
+func (f *FileServer) handleConnection(fc *connection.FileConn) {
 }

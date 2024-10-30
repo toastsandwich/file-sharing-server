@@ -1,0 +1,9 @@
+allow file share, download with permission from user.
+
+1. Server struct
+  handle concurrent users, 
+  allow graceful shutdown
+
+2. Checking how we can add bolt db
+
+3. Storage for username and password

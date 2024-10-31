@@ -1,11 +1,12 @@
-package server
+package file_server
 
 import (
-	"errors"
+	"fmt"
 	"net"
 	"sync"
 
-	"github.com/toastsandwich/fileSharingSystem/connection"
+	"github.com/toastsandwich/fileSharingSystem/server/connection"
+	idgenerator "github.com/toastsandwich/fileSharingSystem/server/idGenerator"
 )
 
 /*
@@ -20,6 +21,10 @@ map ::
 	ip2 					recv
 	ip3						send
 
+scratch this map
+
+new map ::
+	conn struct{}
 
 
 example:
@@ -32,6 +37,7 @@ example:
 const maxconnections = 10
 
 type FileServer struct {
+	iD      string
 	addr    string
 	counter int // counter to have server limited connections
 	mu      sync.Mutex
@@ -40,8 +46,10 @@ type FileServer struct {
 	ErrorCh  chan error                        // For better error handelling
 }
 
+// create a new FileServer
 func NewFileServer(addr string) *FileServer {
 	return &FileServer{
+		iD:      idgenerator.GenerateID("file-server"),
 		addr:    addr,
 		counter: 0,
 
@@ -54,7 +62,7 @@ func (f *FileServer) Start() {
 	// listener for accepting incoming connections
 	ln, err := net.Listen("tcp", f.addr)
 	if err != nil {
-		f.ErrorCh <- errors.New("error creating listener for the server")
+		f.ErrorCh <- err
 		return
 	}
 	defer ln.Close() // close the listner
@@ -80,11 +88,23 @@ func (f *FileServer) Start() {
 			f.ErrorCh <- err
 			continue
 		}
-
 		// start a seperate go rountine for each connetion
 		go f.handleConnection(fc)
 	}
 }
 
 func (f *FileServer) handleConnection(fc *connection.FileConn) {
+	defer fc.Close()
+
+	perm := fc.Perm()
+	buf := []byte(string(perm))
+	_, err := fc.Write(buf)
+	if err != nil {
+		f.ErrorCh <- err
+	}
+}
+
+func (f *FileServer) Info() {
+	info := fmt.Sprintf("server id: %s\nserver addr: %s", f.iD, f.addr)
+	fmt.Println(info)
 }
